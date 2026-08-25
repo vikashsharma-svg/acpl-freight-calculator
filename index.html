@@ -295,6 +295,30 @@ const ACPL_DATA = {"origin":{"name":"Bhopal - Transport Nagar","pincode":"462021
             eff:quoteHi/deadW,ftlAnchor:T.ftlAnchor,minApplied:actual<MINW};
   }
 
+  // "link-API": compute a plain result object from the current inputs (used for ?format=json)
+  function apiJSON(){
+    const pin=$('pin').value.trim();
+    const res=resolve(pin);
+    if(res.mode==='invalid'||res.mode==='notfound') return {ok:false,error:res.mode};
+    const d=res.dest;
+    const T={name:d.dest,state:d.state,sr:d.sr,rate:res.rate,dd:res.dd,mode:res.mode,km:res.km,
+             originKm:res.originKm,matchName:res.matchName,matchKm:res.matchKm,area:res.area};
+    const pc=(/^\d{6}$/.test(pin)&&D.pins[pin])?D.pins[pin]:[d.lat,d.lon];
+    T.ftlAnchor=nearestAnchor(pc[0],pc[1],true);
+    const c=compute(T);
+    if(!c) return {ok:false,error:'no_load',message:'provide weight or dimensions'};
+    const city=(T.mode==='estimated'&&T.area)?titleCase(T.area.district):titleCase(T.name);
+    const state=(T.mode==='estimated'&&T.area)?T.area.state:T.state;
+    return {ok:true, destination:{city:city,state:state,pincode:pin},
+      distance_from_bhopal_km:T.originKm||0,
+      weight:{actual_kg:c.actual}, dimensions:{boxes:c.dm.qty,cbm:c.dm.cbm,volumetric_kg:c.dm.volWt},
+      vehicle:{size:c.fv[1],cbm_capacity:c.fv[3],payload_kg_max:c.fv[4]},
+      freight:{quote_low:c.quoteLo,quote_high:c.quoteHi,cost:c.cost,rate_per_km:c.perKm,
+               lane_calibrated:!!c.ftlAnchor,margin:'2-5%'},
+      rate_source:c.ftlAnchor?{type:'bilty_calibrated',from:c.ftlAnchor.name}:{type:'estimated'},
+      currency:'INR'};
+  }
+
   function render(){
     const pin=$('pin').value.trim();
     const box=$('result');
@@ -420,6 +444,28 @@ const ACPL_DATA = {"origin":{"name":"Bhopal - Transport Nagar","pincode":"462021
     'Estimate only; add-on charges (GC, e-way, door, FOV, hamali, ODA) not included. Based on quotation '+D.meta.ref+' + your bilties; final billing by ACPL.';
 
   render();
+
+  // ---- link-API: prefill inputs from URL query (?pincode=&weight=&l=&b=&h=&unit=&qty=&format=json) ----
+  (function initFromURL(){
+    const qp=new URLSearchParams(location.search);
+    const pin=qp.get('pincode')||qp.get('pin');
+    if(!pin) return;
+    $('pin').value=pin;
+    const wt=qp.get('weight')||qp.get('wt'); if(wt) $('wt').value=wt;
+    if(qp.get('l')){
+      const r=document.querySelector('#dimRows .dimrow');
+      r.querySelector('.dl').value=qp.get('l'); r.querySelector('.db').value=qp.get('b')||'';
+      r.querySelector('.dh').value=qp.get('h')||''; if(qp.get('unit'))r.querySelector('.du').value=qp.get('unit');
+      r.querySelector('.dq').value=qp.get('qty')||'1';
+    }
+    updateDimOut();
+    if((qp.get('format')||'').toLowerCase()==='json'){
+      const out=apiJSON();
+      document.body.innerHTML='<pre style="font:13px/1.6 ui-monospace,Menlo,Consolas,monospace;padding:18px;white-space:pre-wrap;color:#1a2230">'+JSON.stringify(out,null,2).replace(/&/g,'&amp;').replace(/</g,'&lt;')+'</pre>';
+    } else {
+      render();
+    }
+  })();
 })();
 </script>
 </body>
